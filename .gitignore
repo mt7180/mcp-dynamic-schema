@@ -1,1 +1,16 @@
+
+# MacOS specific files
+.DS_Store
+__MACOSX/
+.AppleDouble
+.LSOverride
+Icon[]
+
+# Python specific files
+__pycache__/
+
+# environment variables
 .env
+
+# custom
+note.*
