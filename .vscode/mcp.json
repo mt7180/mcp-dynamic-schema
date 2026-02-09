@@ -1,0 +1,17 @@
+{
+	"servers": {
+		"dynamic-schema-mcp-server": {
+			"type": "stdio",
+			"command": "uv",
+			"args": [
+				"run",
+				"--with",
+				"fastmcp",
+				"fastmcp",
+				"run",
+				"server.py"
+			]
+		}
+	},
+	"inputs": []
+}

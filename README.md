@@ -13,6 +13,8 @@
 Transform free text into structured output using runtime-generated dynamic schemas with FastMCP and Pydantic.
 </div>
 
+#### Tools
+- dynamic_schema_extract -> Extracts data from the provided text into a dynamically generated schema.
 
 
 <!-- LINKS -->
