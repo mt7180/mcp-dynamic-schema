@@ -1,38 +1,54 @@
-from fastmcp import FastMCP, Context
+from fastmcp import FastMCP, Client, Context
 from typing import Type
 from pydantic import (
     BaseModel,
     Field,
     create_model,
 )
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from fastmcp.client.sampling.handlers.openai import OpenAISamplingHandler
 
-from dotenv import load_dotenv
 from typing import List, Literal
+from rich.console import Console
+import os
 
-load_dotenv()
+
+class Settings(BaseSettings):
+    OPENAI_API_KEY: str
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+
+settings = Settings()
+os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+
+console = Console()
+
 
 mcp = FastMCP(
     "Dynamic Data Extraction MCP Server",
-    sampling_handler=OpenAISamplingHandler(default_model="gpt-5-mini"),
-    sampling_handler_behavior="fallback"
+    sampling_handler=OpenAISamplingHandler(default_model="gpt-4o"),
+    sampling_handler_behavior="fallback",
 )
 
+
 @mcp.tool()
-async def dynamic_schema_extract(text: str, schema_name: str, ctx: Context) -> List[BaseModel]:
+async def dynamic_schema_extract(
+    user_specification: str, schema_name: str, ctx: Context
+) -> List[BaseModel]:
     """Extracts data from the provided text into a dynamically generated schema."""
-    
+
     class Property(BaseModel):
         """property name and corresponding type"""
+
         name: str = Field(..., description="must be snake case")
         type: Literal["string", "integer", "boolean"]
 
     class DynamicSchema(BaseModel):
         """schema for the dynamic data extraction"""
+
         name: str
         description: str
         properties: list[Property]
-
 
     def factory(schema: DynamicSchema) -> Type[BaseModel]:
         type_definition = {
@@ -41,7 +57,8 @@ async def dynamic_schema_extract(text: str, schema_name: str, ctx: Context) -> L
             "boolean": ("bool", True),
         }
         field_definitions = {
-            attribute.name: (type_definition[attribute.type]) for attribute in schema.properties
+            attribute.name: (type_definition[attribute.type])
+            for attribute in schema.properties
         }
 
         DataModel: type[BaseModel] = create_model(
@@ -61,13 +78,11 @@ async def dynamic_schema_extract(text: str, schema_name: str, ctx: Context) -> L
         temperature=0.7,
         max_tokens=300,
         result_type=DynamicSchema,
-        system_prompt=(
-            "You are a world class data structure extractor. "
-        ),
-        messages= f"""provide all necessary properties for a {schema_name} data class which captures all given information
+        system_prompt=("You are a world class data structure extractor. "),
+        messages=f"""provide all necessary properties for a {schema_name} data class which captures all given information
             about the {schema_name}s decribed in the text below. 
-            text: {' '.join(text)}
-            """
+            text: {" ".join(user_specification)}
+            """,
     )
 
     schema = custom_properties.result
@@ -77,15 +92,32 @@ async def dynamic_schema_extract(text: str, schema_name: str, ctx: Context) -> L
 
     DataModel: type[BaseModel] = factory(schema)
 
-    
     results = await ctx.sample(
-        result_type=List[DataModel],    # type: ignore[valid-type]
-        messages=f"parse the text: `{text}`",
+        result_type=List[DataModel],  # type: ignore[valid-type]
+        messages=f"parse the text: `{user_specification}`",
         temperature=0,
     )
-    await ctx.info(f"Data extracted: {results.text}")
+    # await ctx.info(f"Data extracted: {results.text}")
     return results.result
 
 
+async def main():
+
+    handler = OpenAISamplingHandler(default_model="gpt-4o")
+
+    async with Client(mcp, sampling_handler=handler) as client:
+        user_specification = (
+            "extract a nested Contact with Address schema from the following Text: \n"
+            "testi testuser \nteststreet 99\n3456 Testcity\nGermany\ngerman\nmale\n"
+        )
+        result = await client.call_tool(
+            "dynamic_schema_extract",
+            {"user_specification": user_specification, "schema_name": "Contact"},
+        )
+        console.print("LLM Response:", result.structured_content)
+
+
 if __name__ == "__main__":
-    mcp.run()
+    import asyncio
+
+    asyncio.run(main())
